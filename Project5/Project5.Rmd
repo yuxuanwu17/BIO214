@@ -1,0 +1,311 @@
+---
+title: "Project 5. Genomic Data Science for Epigenetics"
+output:
+  word_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      fig.height = 3.2,
+                      fig.width = 6.5)
+```
+
+## The Outline for Project 5.
+
+Project 5 aims to discover a set of genomic features that could explain and predict patterns of epigenetic status on the genome. Firstly, we will try to apply basic Bioconductor tools to extract the genomic land markers from the gene annotations. Then, we will analyze a published epigenetic modification data using the extracted annotations. Explicitly, we will investigate its consensus motifs, exon lengths, as well as its meta distributions on genes. In the end, we will try to use machine learning to develop a prediction tool for the epigenetic modification, and see if we can integrate the genome topologies discovered from the EDA to enhance its prediction performance.
+
+This project tries to reproduce the key findings in the following papers, please check them if you need more background information:
+
+*1.Dominissini D, Moshitch-Moshkovitz S, Schwartz S, Salmon-Divon M, Ungar L, Osenberg S, Cesarkas K, Jacob-Hirsch J, Amariglio N, Kupiec M: Topology of the human and mouse m6A RNA methylomes revealed by m6A-seq. Nature 2012, 485(7397):201-206.*
+
+*2.Meyer KD, Yogesh S, Paul Z, Olivier E, Mason CE, Jaffrey SR: Comprehensive analysis of mRNA methylation reveals enrichment in 3' UTRs and near stop codons. Cell 2012, 149(7):1635–1646.*
+
+*3.Chen K, Wei Z, Zhang Q, Wu X, Rong R, Lu Z, Su J, de Magalhães JP, Rigden DJ, Meng J: WHISTLE: a high-accuracy map of the human N6-methyladenosine (m6A) epitranscriptome predicted using a machine learning approach. Nucleic Acids Research 2019.*
+
+## 1. Extract Transcriptomic Landmarkers
+
+First, our goal is to extract some important genomic features for the later analysis. Retrieve the 4 transcriptomic landmarks shown below from the `TxDb` package of hg19. 
+
+- Transcription Start Sites (TSS).
+- Transcription Ending Sites (TES).
+- Stop Codon.
+- Start Codon.
+
+To achieve this, we need to rely on the combination of a set of "intra-range methods". The extracted landmarks should be `GRanges` object with width = 1. Please store the results into the variables of `TSS`, `TES`, `Start_codon`, and `Stop_codon`, respectively. 
+
+Hint: `transcripts()` can extract the `GRanges` of full transcript (with introns) from `TxDb` object, and `cdsBy()` can retrieve a `GRangesList` that contains exons of CDS for each transcript / genes.  Please try to understand these data structures, and be careful that the `cdsBy()` returns multiple exons of a CDS, not the full CDS with introns.
+
+```{r}
+## === Hint code, fill the "___" ============= ##
+# library(TxDb.___.UCSC.___.knownGene)
+# txdb_hg19 <- TxDb.___.UCSC.___.knownGene
+# TSS <- ___(transcripts(txdb_hg19), width = ___, fix = ___)
+# TES <- ___(transcripts(txdb_hg19), width = ___, fix = ___)
+# Start_codon <- ___(unlist(___(cdsBy(txdb_hg19, by = ___))), width = ___, fix = ___)
+# Stop_codon <- ___(unlist(___(cdsBy(txdb_hg19, by = ___))),width = ___, fix = ___)
+# #Some extra hints, the missing functions above are all intra-range methods
+## ===== Enter your code below  =============== ##
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+txdb_hg19 <- TxDb.Hsapiens.UCSC.hg19.knownGene
+TSS <- resize(transcripts(txdb_hg19), width = 1, fix = "start")
+TES <- resize(transcripts(txdb_hg19), width = 1, fix= "end" )
+Start_codon <- resize(unlist(range(cdsBy(txdb_hg19, by = "tx"))), width = 3, fix = "start")
+Stop_codon <- resize(unlist(range(cdsBy(txdb_hg19, by = "tx"))),width = 3, fix = "end")
+```
+
+```{r}
+unique(TSS)
+unique(TES)
+```
+
+
+- SAQ1: How many unique coordinates for TSS, TES, Start codons, and Stop codons exist on the genome assembly hg19? Is there more alternative usage for the start codons or stop codons? How about the alternative usage for the transcription starts and ends?
+
+- Answer: 
+
+TSS 82960
+TES 82960
+start codon 63691
+stop codon 63691
+
+The start codon is the first codon of a messenger RNA (mRNA) transcript translated by a ribosome. The start codon always codes for methionine in eukaryotes and Archaea and a modified Met (fMet) in bacteria, mitochondria and plastids. The most common start codon is AUG (i.e., ATG in the corresponding DNA sequence)
+
+The stop codon is a nucleotide triplet within messenger RNA that signals a termination of translation into proteins
+
+The transcription start site is the location where the transcription of mRNA starts at the 5’-end of a gene sequence while the transcription end site is the location where transcription ends at the 3’-end of a gene sequence. They are all in the non-coding regions and function as control or influence the transcript process
+
+
+### Examine the Sequence Around the Start and Stop Codons
+
+In this step, we will extract the sequences of the 3 bases windows centered by the Start and Stop condons, then, we will plot the seqeunce logo around the stop and start codons.
+
+A sequence logo is a graphical representation of the conservation on amino acid or nucleic acid fragments. In R, the sequence logo can be plotted using function `ggseqlogo()` in the package `ggseqlogo`. The input of `ggseqlogo()` can be a string vector of nucleotide sequences that have the same string lengths. Please set the method = "prob", so that it will display the proportion of bases at each nucleotide position.
+
+```{r}
+## === Hint code, fill the "___" ============= ##
+#library(ggseqlogo)
+#library(BSgenome.___.UCSC.___)
+#ggseqlogo(as.vector( ___( ___(Hsapiens,Start_codon) ) ), method = "prob")
+#ggseqlogo(as.vector( ___( ___(Hsapiens,Stop_codon) ) ), method = "prob")
+## ===== Enter your code below  =============== ##
+library(ggseqlogo)
+library(BSgenome.Hsapiens.UCSC.hg19)
+ggseqlogo(as.vector( DNAStringSet( Views(Hsapiens,Start_codon) ) ), method = "prob")
+ggseqlogo(as.vector( DNAStringSet( Views(Hsapiens,Stop_codon) ) ), method = "prob")
+```
+
+Afterward, check if the generated sequence logos being mostly consistent with the codon sequences in the common knowledge.
+
+## 2. Identify Sequence Motif of an Epigenetic Modification
+
+Subsequently, we will begin to analyze an epigenetic dataset downloaded from GEO. There is a BED file named `GSE63753.bed` under the project directory. The BED file was downloaded from the supplementary data of the GEO dataset [GSE63753](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE63753). 
+
+The GEO data is published by a study that detect the m6A modifications using miCLIP. miCLIP is a sequencing technology that can detect nucleotide modifications on the transcriptome at a single-base resolution. The file contains one of the processed miCLIP sample in the study, which reveals a single-based methylome of m6A in the HEK293 cell line.
+
+Use the function `rtraklayer::import()` to load the BED file `GSE63753.bed` into R, and save the GRanges in a variable named `m6A`. Subsequently, extract the sequences under the 5bp window centered by the m6A modification. Using the same method of the previous step, plot the frequency of the nucleotides for the pentamer sequences.
+
+```{r}
+## === Hint code, fill the "___" ============= ##
+# m6A <- rtracklayer::import(___)
+# sequence <- ___
+# ggseqlogo( sequence, ___ )
+# ===== Enter your code below  =============== ##
+m6A <- rtracklayer::import("/home/yuxuan/BIO214/Project5/GSE63753.bed")
+sequence <- as.vector( DNAStringSet( Views(Hsapiens,m6A+2) ))
+ggseqlogo( sequence, method = "prob" )
+```
+
+- SAQ2: Check the IUPAC nucleotide ambiguity codes defined in the variable `IUPAC_CODE_MAP`. Then, describe a consensus motif using 5 letters, such that the motif you named can capture >70% of the sequences in the sequence logo plot. The answer cannot be too vague (such as NNNNN), the scope of your motif should be as narrow as possible in terms of the percentage among all possible base combinations of a pentamer. Please briefly explain your reasoning.
+
+- Answer: DRACH
+As can be seen from the sequence logo picture, among the 5 base sequnce, the third and the forth bases are determined (3-A,4-C). Regarding to the other three bases, their sequence all contain four bases possibilities. Owing to ensure the scope is as narrow as possible, I therefore exclude the least possible base condition and retained the base D,R,H to 1st, 2rd,5th respectively. 
+The proportion of the m6A matching in consensus sequnce "DRACH" is 0.773
+
+
+You can evaluate the proportion of the m6A matching with:
+```{r}
+IUPAC_CODE_MAP
+mean(vcountPattern("DRACH", DNAStringSet( Views( Hsapiens, m6A + 2) ), fixed = F)) #Change some bases in GGACA into ambiguity code so that it can include more motifs
+```
+
+## 3. Plot the Length of Exons
+
+Next, we will explore the correlation between exon lengths and m6A modification. One of the EDA approaches is to plot the exon length distribution for exons containing or not containing the m6A sites.
+
+Fill in the code below so that we will create 2 vectors of the same length. The first vector named `length_exon` contains length of each exon on hg19, while the second vector named `overlap_m6A` is a dummy variable (logic), and it will be true if the exon contains m6A. Then, run the code afterwards to plot the densities of exon lengths stratified by the overlapping status with the modification.
+
+```{r}
+## === Hint code, fill the "___" ============= ##
+#ex_hg19 <- ___(___) #extract exons of hg19 using exons()
+#length_exon <- ___(___) #extract the lengths for each of the exons
+#overlap_m6A <- ___%___%___ #retrieve a dummy variable, true if exon overlapps with m6A
+# ===== Enter your code below  =============== ##
+ex_hg19 <- exons(txdb_hg19) #extract exons of hg19 using exons()
+length_exon <- width(ex_hg19) #extract the lengths for each of the exons
+overlap_m6A <- ex_hg19%over%m6A #retrieve a dummy variable, true if exon overlapps with m6A
+# ===== Your code is finished ================ ##
+library(ggplot2)
+library(ggsci)
+ggplot(data.frame(length_exon,overlap_m6A)) +
+                   geom_density(aes(x = log(length_exon),
+                                    colour = overlap_m6A,
+                                    fill = overlap_m6A), alpha = 0.5) + 
+                   theme_classic() + scale_color_npg()
+```
+
+- SAQ3: Please interpret the density plot. What is the difference between the exons containing the modification and the exons without the modification? Are we more likely to observe m6A on long exons? If there is a boundary of exon length to classify the exons containing or not containing the m6A, what boundary would you choose?
+
+- Answer: 
+Generally, the exons containing the modification have longer length, about e^7 bp in length. On the contrary, the exons without the modification are about e^5 bp.
+Based on the figure, the average area (peak) of long exons tend to locate on the right side of the axis (blue plot), in other word, the m6a tend to be find in long exons.
+There is a boundary for exon length to classify the exons containing or not containing the m6A, I would choose e^6 bp, since there is an intersection about two lines.
+
+## 4. Plot the Topology (Distribution) of Markers on Genes
+
+Next, we will draw a meta-gene plot. Specifically, the figure summarizes the spatial distribution of genomic features on transcript coordinates relative to start and the stop codons. You could refer to Figure 5D in Meyer KD.et.al Nature (2012) as an example.
+
+The information we need to draw this graph is not complex: the only required values are the relative positions of each site on the 5'UTR, CDS, and 3'UTR. After calculating the relative positions, all we have to do is to draw 3 histograms of the relative position of each region, and the final distribution is just a combination of these 3 histograms.
+
+In the following code chunk, you need to create a function called `relative_pos_on_region()`. The function will return the relative position of its input GRanges (parameter `x`) on the GRangesList (parameter `region`). The relative position on a region is defined as the distance toward the 5' Start of the region divided by the full length of the region. 
+
+For example, if a site is located on the 200bp downstream of the start of a 5'UTR, and the length of the 5'UTR is 1000, then its relative position on 5'UTR is 200/1000 = 0.2. If some entries of x are not in the region, the function should omit those entries and only return the relative positions for entries mapped to the region. 
+
+```{r}
+## === Hint code, fill the "___" ============= ##
+#relative_pos_on_region <- function(x, region){
+#region_map <- map___Transcripts(___, ___)
+#region_width <- sum(___(___))[region_map$___]
+#start_on_region <- ___(region_map)
+#return(___/)
+#}
+# ===== Enter your code below  =============== ##
+library (GenomicAlignments)
+relative_pos_on_region <- function(x, region){
+region_map <- mapToTranscripts(x, region)
+region_width <- sum(width(region))[region_map$transcriptsHits]
+start_on_region <- start(region_map)
+return(start_on_region/region_width)
+}
+# ===== Your code is finished ================ ##
+plot_tx <- function(marker,utr5_gr,cds_gr,utr3_gr,marker_name){
+
+  utr5_pos <- relative_pos_on_region(marker,utr5_gr)
+  cds_pos <- relative_pos_on_region(marker,cds_gr)
+  utr3_pos <- relative_pos_on_region(marker,utr3_gr)
+
+  pldf <- data.frame(relative_pos = c(utr5_pos, cds_pos, utr3_pos),
+                     tx_region = rep(c("5'UTR","CDS","3'UTR"),
+                                     c(length(utr5_pos),length(cds_pos),length(utr3_pos)))
+             )
+
+  pldf$tx_region = factor(pldf$tx_region,levels = c("5'UTR","CDS","3'UTR"))
+
+  ggplot(pldf) +
+    geom_histogram(aes(x=relative_pos),bins = 50,
+                   colour = "black", fill = "black") +
+    facet_wrap(~tx_region) +
+    theme_classic() +
+    labs(title = marker_name, x = "Relative Position")
+} #What this function do is just organize the data and plot the histogram.
+
+#Extract the regions for 5'UTR, CDS, and 3'UTR
+UTR5 <- fiveUTRsByTranscript(txdb_hg19) 
+CDS <- cdsBy(txdb_hg19, by = "tx")
+UTR3 <- threeUTRsByTranscript(txdb_hg19)
+
+#Then we will generate a serious of plot for the topology of previously extracted tx landmarkers
+plot_tx(TSS,UTR5,CDS,UTR3,"TSS")
+plot_tx(TES,UTR5,CDS,UTR3,"TES")
+plot_tx(Stop_codon,UTR5,CDS,UTR3,"Stop Codon")
+plot_tx(Start_codon,UTR5,CDS,UTR3,"Start Codon")
+plot_tx(m6A,UTR5,CDS,UTR3,"m6A")
+```
+
+- SAQ4: Please interpret the computed topology distributions for m6A. Which transcript regions are more likely to contain the modification sites? Are the relative positions on the regions important for m6A? Around which transcript landmarks (e.x. TSS, start codon) is the modification most enriched? Please explain your reasoning.
+
+- Answer: CDS regions are most likely to contain the modification site
+The relative positions on the regions are important for m6A since the modifications sites would change with the relative position as shown in the figure
+The modification are enriched around the beginning of 5’UTR of TSS, the beginning of CDS of start codon, the end of 3’UTR of TES, the end of CDS of Stop codon. Because as shwon in the figure, the modifications enriched regions where the transcript landmarks work.
+
+## 5. Engineering Genomic Features for Site Prediction of Epigentic Markers
+
+In project 3, we introduced the unsupervised learning methods for the prediction of tissue labels from gene expression data. Now, we want to use the machine learning model again to predict the modification status on consensus motifs. In this case, we want to use a supervised learning methods, which means that the target of the prediction is provided to the model during the model training process. 
+
+Our training data is stored in the `mcols()` of `m6A_ml`, which contains 1000 training instances for both the positive and negative data. The metadata is a `DataFrame` that has columns for target and sequence-based features. The sequence-based features are 30 variables extracted only from the nucleotide sequences surrounding the modification sites, and their calculation is NOT dependent on the gene annotations (from only BSgenome but not from TxDb). What you need to do is to create the following annotation based genomic features as the additional metadata columns in `m6A_ml`: 
+
+- `UTR5`: a logical variable indicating the site overlapping with 5'UTR.
+- `CDS`: a logical variable indicating the site overlapping with CDS.
+- `UTR3`: a logical variable indicating the site overlapping with 3'UTR.
+- `long_exon`: a logical variable for sites overlapping with long exons (exon length > XXX, XXX is a boundary number choosen by you).
+- `Stop_codon`: a logical variable for sites overlapping with the XXX bp centered by a stop codon. (XXX is also choosen by you)
+- `UTR3_pos`: a real number value for the relative position of the site on 3'UTR (0 if not on 3'UTR).
+- `CDS_pos`: a real number value for the relative position of the site on CDS (0 if not on CDS).
+
+Please fill the following code chunk to add the above-mentioned genomic features into the prediction models.
+
+After adding the features, we will run a high-level package to automatically build 4 prediction models and report their performance using 5 folds cross-validation.  The 4 models are a combination of 2 ML algorithms (SVM and RandomForest) and 2 feature types (sequence feature along and sequence + genomic features).
+
+You will get full score for this part if the genomic features you engineered can lead to an AUROC of more than 0.70 in any one of the ML algorithms.
+
+```{r}
+m6A_ml <- readRDS("m6A_ml.rds") #m6A_ml is a GRanges, its metadata columns are features used in the prediction model
+
+## === Hint code, fill the "___" ============= ##
+#m6A_ml$UTR5 <- m6A_ml %___% ___ #add a dummy feature for 5'UTR
+#m6A_ml$CDS <- m6A_ml ___ ___ #add a dummy feature for 5'CDS
+#m6A_ml$UTR3 <- m6A_ml ___ ___ #add a dummy feature for 3'UTR
+#m6A_ml$long_exon <- m6A_ml ___ ___ #add a dummy feature for long exon (> a boundary number)
+#m6A_ml$Stop_codon <- m6A_ml ___ ___ #add a dummy feature for stop codon flanked by a choosen number
+#m6A_ml$UTR3_pos <- WhistleR:::relative_pos_map(m6A_ml, UTR3, 0, F) #a feature for relative position on UTR3
+#m6A_ml$CDS_pos <- WhistleR:::relative_pos_map(m6A_ml, CDS, 0, F) #a feature for relative position on CDS
+# ===== Enter your code below  =============== ##
+m6A_ml$UTR5 <- m6A_ml %over% UTR5 #add a dummy feature for 5'UTR
+m6A_ml$CDS <- m6A_ml %over% CDS #add a dummy feature for 5'CDS
+m6A_ml$UTR3 <- m6A_ml %over% UTR3 #add a dummy feature for 3'UTR
+m6A_ml$long_exon <- m6A_ml %over% ex_hg19 #add a dummy feature for long exon (> a boundary number)
+m6A_ml$Stop_codon <- m6A_ml %over% Stop_codon#add a dummy feature for stop codon flanked by a choosen number
+m6A_ml$UTR3_pos <- WhistleR:::relative_pos_map(m6A_ml, UTR3, 0, F) #a feature for relative position on UTR3
+m6A_ml$CDS_pos <- WhistleR:::relative_pos_map(m6A_ml, CDS, 0, F) #a feature for relative position on CDS
+# ===== Your code is finished ================ ##
+library(perflite)
+library(knitr)
+set.seed(102)
+
+perf_results <- performance_class(
+  y = list(
+    target_1 = as.factor(m6A_ml$m6A),
+    target_2 = as.factor(m6A_ml$m6A)
+  ), #list of response vectors
+  X = list(
+    sequence_feature = data.frame( mcols(m6A_ml)[,2:31] ),
+    add_genomic_feature =  data.frame( mcols(m6A_ml)[,-1] ) 
+  ), #list of feature matrixes
+  k = 5, #number of folds in cross validation
+  p = 1, #number of parallel computation
+  cv_f = c(svm = svm_class,
+           randomForest = randomForest_class)  #list of classifier functions.
+)
+
+kable(perf_results[[1]], 
+       caption = names(perf_results)[1]) 
+
+kable(perf_results[[2]],
+       caption = names(perf_results)[2]) 
+```
+
+- SAQ5: For the prediction made by SVM, after adding genomic features (annotation-based), by how much is the AUROC improved compared with only using the sequence features? Can you explain such an improvement? If an annotation-based feature is important at improving the prediction performance, can we infer that the annotation is biologically/scientifically significant for the predicted epigenetic marker? Please explain your reasoning.
+
+- Answer: After adding genomic features, the AUROC improved from 0.61-0.71. This improvement is resulted from the adding genomic features since it covers more influcing factors and analyzes the information in more perspective, rather than restricting to the sequence. 
+
+The annotation-based feature is important at improving the prediction performance so we can infer the annotation is biologically significant for the predicted epigenetic marker since many factors influence the identification, which suggests more features to be included.Plus, as can be seen in this experiment, the performance improved.
+
+## Session Info
+
+```{r}
+sessionInfo()
+```
+
+
